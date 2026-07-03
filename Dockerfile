@@ -1,8 +1,13 @@
 FROM python:3.11-slim
 
-RUN pip install --no-cache-dir playwright \
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt \
     && playwright install --with-deps chromium
 
-EXPOSE 3000
+COPY . .
 
-CMD ["python", "-m", "playwright", "run-server", "--port", "3000", "--host", "0.0.0.0"]
+EXPOSE 8080
+
+CMD ["python", "main.py"]
