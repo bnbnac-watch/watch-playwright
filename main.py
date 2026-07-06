@@ -16,6 +16,14 @@ MAX_CONCURRENCY = int(os.getenv("MAX_CONCURRENCY", "1"))
 _semaphore = asyncio.Semaphore(MAX_CONCURRENCY)
 _playwright: Playwright | None = None
 
+# 일부 사이트(WAF/CloudFront)가 기본 headless Chromium 지문을 차단해서
+# UA/webdriver 플래그를 실제 브라우저처럼 위장한다.
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+)
+_STEALTH_INIT_SCRIPT = "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+
 
 class RenderRequest(BaseModel):
     url: str
@@ -46,13 +54,22 @@ async def health():
 async def render(req: RenderRequest):
     async with _semaphore:
         logger.info("render 시작: %s", req.url)
-        browser = await _playwright.chromium.launch()
+        browser = await _playwright.chromium.launch(
+            args=["--disable-blink-features=AutomationControlled"]
+        )
         try:
-            context = await browser.new_context()
+            context = await browser.new_context(
+                user_agent=_USER_AGENT,
+                viewport={"width": 1280, "height": 900},
+                locale="ko-KR",
+            )
+            await context.add_init_script(_STEALTH_INIT_SCRIPT)
             page = await context.new_page()
             await page.goto(req.url, wait_until=req.wait_until, timeout=req.goto_timeout_ms)
             if req.wait_for:
-                await page.wait_for_selector(req.wait_for, timeout=req.wait_for_timeout_ms)
+                await page.wait_for_selector(
+                    req.wait_for, timeout=req.wait_for_timeout_ms, state="attached"
+                )
             if req.sleep:
                 await asyncio.sleep(req.sleep)
             html = await page.content()
