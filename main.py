@@ -55,7 +55,10 @@ async def render(req: RenderRequest):
     async with _semaphore:
         logger.info("render 시작: %s", req.url)
         browser = await _playwright.chromium.launch(
-            args=["--disable-blink-features=AutomationControlled"]
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+            ]
         )
         try:
             context = await browser.new_context(
